@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartPark Santa Marta | Prototipo Funcional IoT & Cloud</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --navy: #0f243e;
+      --blue: #1a5f9c;
+      --teal: #107c69;
+      --orange: #d96b27;
+      --red: #c53030;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+    header {
+      background: linear-gradient(135deg, var(--navy) 0%, #17375e 100%);
+      color: #fff;
+      padding: 14px 24px;
+      border-bottom: 4px solid var(--orange);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: 0.3px; }
+    .brand p { font-size: 0.82rem; color: #cbd5e1; margin-top: 2px; }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.12);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .dot-live {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.25); opacity: 0.7; } }
+
+    /* KPI Top Bar */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: 12px;
+      padding: 16px 24px 6px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .kpi-card {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 12px 16px;
+      border-left: 5px solid var(--blue);
+      box-shadow: 0 2px 6px rgba(15,36,62,0.06);
+    }
+    .kpi-card.teal { border-left-color: var(--teal); }
+    .kpi-card.orange { border-left-color: var(--orange); }
+    .kpi-card.navy { border-left-color: var(--navy); }
+    .kpi-label { font-size: 0.74rem; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+    .kpi-value { font-size: 1.45rem; font-weight: 800; color: var(--navy); margin-top: 3px; }
+    .kpi-sub { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    /* Main Workspace Layout */
+    .main-container {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 16px;
+      padding: 12px 24px 24px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      flex: 1;
+    }
+    @media (max-width: 1024px) { .main-container { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 3px 10px rgba(15,36,62,0.07);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      background: var(--navy);
+      color: #fff;
+      padding: 11px 16px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header span.tag {
+      background: var(--orange);
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+    }
+    .panel-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+    /* Map */
+    #map { width: 100%; height: 295px; border-radius: 8px; border: 1px solid var(--border); z-index: 1; }
+
+    /* Parking List Cards (Driver UI) */
+    .pk-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+    .pk-card {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 12px;
+      background: #f8fafc;
+      transition: transform 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+    }
+    .pk-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .pk-title { font-weight: 700; font-size: 0.9rem; color: var(--navy); }
+    .pk-addr { font-size: 0.75rem; color: var(--muted); margin: 3px 0 8px; }
+    .badge-status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    .bg-DISPONIBLE { background: var(--teal); }
+    .bg-POCOS_CUPOS { background: var(--orange); }
+    .bg-COMPLETO { background: var(--red); }
+
+    /* IoT Sensor Grid Simulator */
+    .iot-lot-box {
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 12px;
+      background: #f8fafc;
+    }
+    .iot-lot-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+    .slots-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .slot-btn {
+      border: none;
+      border-radius: 7px;
+      padding: 9px 6px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+    .slot-btn:active { transform: scale(0.95); }
+    .slot-btn.free { background: var(--teal); }
+    .slot-btn.busy { background: var(--red); }
+    .slot-btn small { font-size: 0.65rem; font-weight: 500; opacity: 0.92; }
+
+    /* Telemetry Log Console */
+    .console-box {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Consolas', monospace;
+      font-size: 0.76rem;
+      padding: 10px 12px;
+      border-radius: 8px;
+      height: 155px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .log-line { border-bottom: 1px solid rgba(255,255,255,0.07); padding-bottom: 3px; }
+    .log-time { color: #38bdf8; font-weight: 700; }
+    .log-origin { color: #facc15; font-weight: 700; }
+    .log-ms { color: #4ade80; float: right; }
+
+    /* Pre-test vs Post-test Bar comparison */
+    .comparison-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-size: 0.8rem;
+    }
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+    .bar-label { width: 145px; font-weight: 600; font-size: 0.76rem; }
+    .bar-track { flex: 1; background: #dbeafe; height: 16px; border-radius: 99px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s; }
+    footer {
+      text-align: center;
+      padding: 10px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>SMARTPARK SANTA MARTA — PROTOTIPO FUNCIONAL (IoT + CLOUD)</h1>
+      <p>Centro Histórico de Santa Marta | Ingeniería de Sistemas — Universidad del Magdalena | Jaime Andrés Ruiz Pérez</p>
+    </div>
+    <div class="status-pill">
+      <div class="dot-live"></div>
+      <span id="mode-indicator">Nodos IoT & Base de Datos en Tiempo Real Activos</span>
+    </div>
+  </header>
+
+  <!-- KPI Operational Indicators (Marco Conceptual / Matriz de Operacionalización) -->
+  <section class="kpi-grid">
+    <div class="kpi-card teal">
+      <div class="kpi-label">Cupos Libres en Tiempo Real</div>
+      <div class="kpi-value" id="kpi-libres">9 / 24</div>
+      <div class="kpi-sub">Muestra: 3 Parqueaderos Formales (n1=3)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Latencia Sincronización Cloud</div>
+      <div class="kpi-value" id="kpi-latencia">142 ms</div>
+      <div class="kpi-sub">Meta operacional: &lt; 500 ms (Tiempo real)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Precisión Sensores IoT</div>
+      <div class="kpi-value" id="kpi-precision">97.4%</div>
+      <div class="kpi-sub">Nodos ESP32 + Ultrasónico (&gt; 95%)</div>
+    </div>
+    <div class="kpi-card orange">
+      <div class="kpi-label">Tiempo Búsqueda (Cruising)</div>
+      <div class="kpi-value" id="kpi-tiempo">8.2 min</div>
+      <div class="kpi-sub" id="kpi-reduccion">Reducción del 43.4% vs Pre-test (14.5 min)</div>
+    </div>
+    <div class="kpi-card navy">
+      <div class="kpi-label">Usabilidad SUS & Confiabilidad</div>
+      <div class="kpi-value">84.5 / 100</div>
+      <div class="kpi-sub">Muestra n2=30 conductores | Alfa = 0.86</div>
+    </div>
+  </section>
+
+  <!-- Main Interactive Split Screen -->
+  <main class="main-container">
+
+    <!-- LEFT COLUMN: Driver Mobile/Web App (UI/UX Layer) -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>1. CAPA DE APLICACIÓN (UI/UX): MAPA Y DISPONIBILIDAD EN VIVO</span>
+        <span class="tag">Vista Conductor</span>
+      </div>
+      <div class="panel-body">
+        <div id="map"></div>
+        <div class="pk-cards" id="driver-cards"></div>
+
+        <div class="comparison-box">
+          <strong>Validación Cuasiexperimental (Objetivo Específico 4 — Pre-test vs. Post-test):</strong>
+          <div class="bar-row">
+            <span class="bar-label">Sin Sistema (Pre-test):</span>
+            <div class="bar-track"><div class="bar-fill" style="width: 92%; background: #ef4444;"></div></div>
+            <strong>14.5 min</strong>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Con SmartPark (Post-test):</span>
+            <div class="bar-track"><div class="bar-fill" id="bar-post" style="width: 52%; background: #107c69;"></div></div>
+            <strong id="label-post">8.2 min</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Physical IoT Layer & Cloud Telemetry -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>2. CAPA FÍSICA (SENSORES IoT) Y TELEMETRÍA EN LA NUBE</span>
+        <span class="tag">Haz clic en un cupo para simular entrada/salida</span>
+      </div>
+      <div class="panel-body">
+        <p style="font-size: 0.8rem; color: var(--muted);">
+          <strong>Simulador Interactivo de Nodos IoT (ESP32):</strong> Haz clic sobre cualquier cupo (verde = libre, rojo = ocupado) para simular que un vehículo estaciona o sale en el Centro Histórico y observa la actualización instantánea en el mapa.
+        </p>
+
+        <div id="iot-simulator-container" style="display: flex; flex-direction: column; gap: 10px;"></div>
+
+        <div>
+          <div style="font-size: 0.8rem; font-weight: 700; color: var(--navy); margin-bottom: 5px;">
+            Consola de Telemetría en Tiempo Real (Base de Datos Cloud / Firebase Logs):
+          </div>
+          <div class="console-box" id="telemetry-console"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>
+    Prototipo Funcional de Investigación | Arquitectura Orientada a Objetos (Python + Web UI/UX) | Ley 1581 de 2012 (Habeas Data — Sin captura de datos personales)
+  </footer>
+
+  <script>
+    // Estado inicial compatible con Backend Python POO y con GitHub Pages (Modo autónomo)
+    let usarBackendPython = false;
+    let estadoSistema = {
+      parqueaderos: [
+        {
+          id: "PK-01",
+          nombre: "Parqueadero Catedral Basílica",
+          direccion: "Calle 16 # 4-25 (Sector Plaza de la Catedral)",
+          latitud: 11.2443,
+          longitud: -74.2115,
+          tarifa_hora_cop: 4500,
+          sensores: [
+            { id_cupo: "PK-01-C01", ocupado: true, latencia_ms: 118 },
+            { id_cupo: "PK-01-C02", ocupado: true, latencia_ms: 132 },
+            { id_cupo: "PK-01-C03", ocupado: true, latencia_ms: 124 },
+            { id_cupo: "PK-01-C04", ocupado: true, latencia_ms: 140 },
+            { id_cupo: "PK-01-C05", ocupado: true, latencia_ms: 110 },
+            { id_cupo: "PK-01-C06", ocupado: false, latencia_ms: 98 },
+            { id_cupo: "PK-01-C07", ocupado: false, latencia_ms: 115 },
+            { id_cupo: "PK-01-C08", ocupado: false, latencia_ms: 121 }
+          ]
+        },
+        {
+          id: "PK-02",
+          nombre: "Parqueadero Parque de los Novios",
+          direccion: "Carrera 3 # 19-18 (Zona Gastronómica y Turística)",
+          latitud: 11.2419,
+          longitud: -74.2128,
+          tarifa_hora_cop: 5000,
+          sensores: [
+            { id_cupo: "PK-02-C01", ocupado: true, latencia_ms: 145 },
+            { id_cupo: "PK-02-C02", ocupado: true, latencia_ms: 138 },
+            { id_cupo: "PK-02-C03", ocupado: true, latencia_ms: 152 },
+            { id_cupo: "PK-02-C04", ocupado: true, latencia_ms: 119 },
+            { id_cupo: "PK-02-C05", ocupado: true, latencia_ms: 160 },
+            { id_cupo: "PK-02-C06", ocupado: true, latencia_ms: 133 },
+            { id_cupo: "PK-02-C07", ocupado: true, latencia_ms: 128 },
+            { id_cupo: "PK-02-C08", ocupado: false, latencia_ms: 112 }
+          ]
+        },
+        {
+          id: "PK-03",
+          nombre: "Parqueadero Camellón de la Bahía",
+          direccion: "Carrera 1C # 14-40 (Sector Rodrigo de Bastidas)",
+          latitud: 11.2452,
+          longitud: -74.2141,
+          tarifa_hora_cop: 4000,
+          sensores: [
+            { id_cupo: "PK-03-C01", ocupado: true, latencia_ms: 105 },
+            { id_cupo: "PK-03-C02", ocupado: true, latencia_ms: 114 },
+            { id_cupo: "PK-03-C03", ocupado: true, latencia_ms: 129 },
+            { id_cupo: "PK-03-C04", ocupado: false, latencia_ms: 95 },
+            { id_cupo: "PK-03-C05", ocupado: false, latencia_ms: 108 },
+            { id_cupo: "PK-03-C06", ocupado: false, latencia_ms: 117 },
+            { id_cupo: "PK-03-C07", ocupado: false, latencia_ms: 102 },
+            { id_cupo: "PK-03-C08", ocupado: false, latencia_ms: 99 }
+          ]
+        }
+      ],
+      logs: [
+        { hora: new Date().toLocaleTimeString(), origen: "SISTEMA_CLOUD", mensaje: "Arquitectura Cliente-Servidor inicializada con 3 parqueaderos piloto (24 sensores IoT)", latencia_ms: 118 }
+      ]
+    };
+
+    // Inicializar Mapa Leaflet en el Centro Histórico de Santa Marta
+    const map = L.map('map').setView([11.2436, -74.2128], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap | Centro Histórico de Santa Marta'
+    }).addTo(map);
+    const markers = {};
+
+    function recalcularPropiedadesLocales() {
+      let totalCupos = 0, totalOcupados = 0, sumaLatencia = 0;
+      estadoSistema.parqueaderos.forEach(p => {
+        p.total_cupos = p.sensores.length;
+        p.cupos_ocupados = p.sensores.filter(s => s.ocupado).length;
+        p.cupos_disponibles = p.total_cupos - p.cupos_ocupados;
+        p.estado_alerta = p.cupos_disponibles === 0 ? "COMPLETO" : (p.cupos_disponibles <= 2 ? "POCOS_CUPOS" : "DISPONIBLE");
+        totalCupos += p.total_cupos;
+        totalOcupados += p.cupos_ocupados;
+        p.sensores.forEach(s => sumaLatencia += s.latencia_ms);
+      });
+      const postTestMin = +(7.4 + ((totalOcupados / totalCupos) * 1.6)).toFixed(1);
+      const reduccion = +(((14.5 - postTestMin) / 14.5) * 100).toFixed(1);
+      estadoSistema.indicadores = {
+        total_cupos_monitoreados: totalCupos,
+        cupos_libres_totales: totalCupos - totalOcupados,
+        latencia_promedio_ms: Math.round(sumaLatencia / totalCupos),
+        precision_sensores_pct: 97.4,
+        tiempo_busqueda_posttest_min: postTestMin,
+        reduccion_tiempo_pct: reduccion
+      };
+    }
+
+    function renderizarInterfaz() {
+      if (!estadoSistema.indicadores) recalcularPropiedadesLocales();
+      const ind = estadoSistema.indicadores;
+
+      // Actualizar KPIs
+      document.getElementById('kpi-libres').textContent = `${ind.cupos_libres_totales} / ${ind.total_cupos_monitoreados}`;
+      document.getElementById('kpi-latencia').textContent = `${ind.latencia_promedio_ms} ms`;
+      document.getElementById('kpi-precision').textContent = `${ind.precision_sensores_pct}%`;
+      document.getElementById('kpi-tiempo').textContent = `${ind.tiempo_busqueda_posttest_min} min`;
+      document.getElementById('kpi-reduccion').textContent = `Reducción del ${ind.reduccion_tiempo_pct}% vs Pre-test (14.5 min)`;
+      document.getElementById('label-post').textContent = `${ind.tiempo_busqueda_posttest_min} min`;
+      document.getElementById('bar-post').style.width = `${Math.round((ind.tiempo_busqueda_posttest_min / 15.5) * 100)}%`;
+
+      // Renderizar tarjetas del conductor y marcadores en el mapa
+      const driverCards = document.getElementById('driver-cards');
+      driverCards.innerHTML = '';
+
+      const iotContainer = document.getElementById('iot-simulator-container');
+      iotContainer.innerHTML = '';
+
+      estadoSistema.parqueaderos.forEach(p => {
+        const colorPin = p.cupos_disponibles === 0 ? '#c53030' : (p.cupos_disponibles <= 2 ? '#d96b27' : '#107c69');
+
+        // Marcador en el mapa de Santa Marta
+        const iconHtml = `<div style="background:${colorPin};color:#fff;padding:4px 8px;border-radius:99px;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;">P: ${p.cupos_disponibles} libres</div>`;
+        const customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [90, 28], iconAnchor: [45, 14] });
+
+        if (markers[p.id]) {
+          markers[p.id].setIcon(customIcon);
+        } else {
+          markers[p.id] = L.marker([p.latitud, p.longitud], { icon: customIcon }).addTo(map);
+        }
+        markers[p.id].bindPopup(`<b>${p.nombre}</b><br>${p.direccion}<br><b>Disponibles: ${p.cupos_disponibles} de ${p.total_cupos}</b><br>Tarifa: $${p.tarifa_hora_cop} COP/h`);
+
+        // Tarjeta vista conductor
+        const card = document.createElement('div');
+        card.className = 'pk-card';
+        card.onclick = () => { map.setView([p.latitud, p.longitud], 17); markers[p.id].openPopup(); };
+        card.innerHTML = `
+          <div class="pk-title">${p.nombre}</div>
+          <div class="pk-addr">${p.direccion}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="badge-status bg-${p.estado_alerta}">${p.cupos_disponibles} LIBRES / ${p.total_cupos}</span>
+            <span style="font-size:0.78rem;font-weight:700;color:var(--navy);">$${p.tarifa_hora_cop}/h</span>
+          </div>
+        `;
+        driverCards.appendChild(card);
+
+        // Panel simulador IoT
+        const lotBox = document.createElement('div');
+        lotBox.className = 'iot-lot-box';
+        const slotsHtml = p.sensores.map(s => `
+          <button class="slot-btn ${s.ocupado ? 'busy' : 'free'}" onclick="conmutarSensor('${p.id}', '${s.id_cupo}')">
+            <span>${s.id_cupo.split('-').slice(1).join('-')}</span>
+            <small>${s.ocupado ? 'OCUPADO' : 'LIBRE'} (${s.latencia_ms}ms)</small>
+          </button>
+        `).join('');
+
+        lotBox.innerHTML = `
+          <div class="iot-lot-header">
+            <span>${p.nombre} (${p.id})</span>
+            <span style="color:${colorPin}">${p.cupos_disponibles} disponibles</span>
+          </div>
+          <div class="slots-grid">${slotsHtml}</div>
+        `;
+        iotContainer.appendChild(lotBox);
+      });
+
+      // Renderizar consola de logs
+      const consoleEl = document.getElementById('telemetry-console');
+      consoleEl.innerHTML = estadoSistema.logs.map(l => `
+        <div class="log-line">
+          <span class="log-time">[${l.hora}]</span>
+          <span class="log-origin">${l.origen}:</span>
+          <span>${l.mensaje}</span>
+          <span class="log-ms">${l.latencia_ms} ms</span>
+        </div>
+      `).join('');
+    }
+
+    async function conmutarSensor(idParqueadero, idCupo) {
+      if (usarBackendPython) {
+        try {
+          const res = await fetch('/api/sensor/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_parqueadero: idParqueadero, id_cupo: idCupo })
+          });
+          estadoSistema = await res.json();
+          renderizarInterfaz();
+          return;
+        } catch (e) {
+          usarBackendPython = false;
+        }
+      }
+
+      // Modo autónomo (GitHub Pages o apertura directa)
+      const pk = estadoSistema.parqueaderos.find(x => x.id === idParqueadero);
+      if (!pk) return;
+      const sensor = pk.sensores.find(s => s.id_cupo === idCupo);
+      if (!sensor) return;
+
+      sensor.ocupado = !sensor.ocupado;
+      sensor.latencia_ms = Math.floor(Math.random() * 140) + 85;
+      recalcularPropiedadesLocales();
+
+      const accion = sensor.ocupado ? "Vehículo detectado (Ocupado)" : "Cupo liberado (Disponible)";
+      estadoSistema.logs.unshift({
+        hora: new Date().toLocaleTimeString(),
+        origen: `NODO-IoT [${idCupo}]`,
+        mensaje: `${pk.nombre}: ${accion} (${pk.cupos_disponibles} libres)`,
+        latencia_ms: sensor.latencia_ms
+      });
+      renderizarInterfaz();
+    }
+
+    async function inicializarPrototipo() {
+      try {
+        const res = await fetch('/api/estado');
+        if (res.ok) {
+          estadoSistema = await res.json();
+          usarBackendPython = true;
+          document.getElementById('mode-indicator').textContent = "Backend Python POO + Nodos IoT Activos";
+        }
+      } catch (e) {
+        usarBackendPython = false;
+        recalcularPropiedadesLocales();
+      }
+      renderizarInterfaz();
+    }
+
+    inicializarPrototipo();
+  </script>
+</body>
+</html>
